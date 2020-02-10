@@ -1,65 +1,36 @@
-import { Injectable } from '@angular/core';
-import { HttpClient, HttpErrorResponse } from '@angular/common/http';
-import { Observable, throwError } from 'rxjs';
-import { map, catchError, flatMap } from 'rxjs/operators';
+import { Injectable, Injector } from '@angular/core';
 import { Entry } from './entry.model';
+import { BaseResourceService } from '../../../shared/services/base-resource.service';
+import { CategoryService } from './../../categories/shared/category.service';
+import { Observable } from 'rxjs';
+import { flatMap, catchError } from 'rxjs/operators';
 
 @Injectable({
   providedIn: 'root'
 })
-export class EntryService {
-  private apiPath = 'api/entries';
-
-  constructor(private http: HttpClient) { }
-
-  getAll(): Observable<Entry[]> {
-    return this.http.get(this.apiPath).pipe(
-      catchError((err: HttpErrorResponse) => throwError(err)),
-      map(this.jsonDataToEntries)
-    );
-  }
-
-  getById(id: number): Observable<Entry> {
-    return this.http.get(`${this.apiPath}/${id}`).pipe(
-      catchError((err: HttpErrorResponse) => throwError(err)),
-      map((entry: Entry) => entry)
-    );
+export class EntryService extends BaseResourceService<Entry> {
+  constructor(
+    private categoryService: CategoryService,
+    protected injector: Injector,
+  ) {
+    super('api/entries', injector, Entry.fromJson);
   }
 
   create(entry: Entry): Observable<Entry> {
-    return this.http.post(this.apiPath, { ...entry }).pipe(
-      catchError((err: HttpErrorResponse) => throwError(err)),
-      map((response: Entry) => response)
-    );
+    return this.setCategoryAndSendToServer(entry, super.create.bind(this));
   }
 
   update(entry: Entry): Observable<Entry> {
-    return this.http.put(`${this.apiPath}/${entry.id}`, { ...entry }).pipe(
-      catchError((err: HttpErrorResponse) => throwError(err)),
-      map(() => entry)
+    return this.setCategoryAndSendToServer(entry, super.update.bind(this));
+  }
+
+  setCategoryAndSendToServer(entry: Entry, sendFn: any): Observable<Entry> {
+    return this.categoryService.getById(entry.categoryId).pipe(
+      flatMap((category) => {
+        entry.category = category;
+        return sendFn(entry) as Observable<Entry>;
+      }),
+      catchError(this.handleError)
     );
-  }
-
-  delete(id: number): Observable<any> {
-    return this.http.delete(`${this.apiPath}/${id}`).pipe(
-      catchError((err: HttpErrorResponse) => throwError(err)),
-      map(() => null)
-    );
-  }
-
-  private handleError(error: any): Observable<any> {
-    console.log('Error in request: ', error);
-
-    return throwError(error);
-  }
-
-  private jsonDataToEntries(jsonData: any[]): Entry[] {
-    const entries: Entry[] = [];
-
-    jsonData.forEach(element => {
-      const entry = Object.assign(new Entry(), element);
-      entries.push(entry);
-    });
-    return entries;
   }
 }
